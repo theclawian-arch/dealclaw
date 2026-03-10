@@ -33,7 +33,6 @@ export default function Home() {
   }
 
   const selectedItems = items.filter(i => selected.has(i.id))
-  const selectedRetailerIds = [...new Set(selectedItems.map(i => i.retailerId))]
 
   const categoriesWithItems = categories.filter(c =>
     items.some(i => i.category === c)
@@ -146,7 +145,7 @@ export default function Home() {
       {/* Deals modal */}
       {showDeals && (
         <DealsModal
-          retailerIds={selectedRetailerIds}
+          items={selectedItems}
           onClose={() => setShowDeals(false)}
         />
       )}

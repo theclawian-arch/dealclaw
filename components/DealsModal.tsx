@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { RETAILERS } from '@/lib/retailers'
+import { SavedItem } from '@/lib/store'
 
 interface Deal {
   type: string
@@ -12,26 +13,35 @@ interface Deal {
 }
 
 interface Props {
-  retailerIds: string[]
+  items: SavedItem[]
   onClose: () => void
 }
 
-export default function DealsModal({ retailerIds, onClose }: Props) {
+export default function DealsModal({ items, onClose }: Props) {
   const [deals, setDeals] = useState<Record<string, Deal[]>>({})
   const [loading, setLoading] = useState(true)
+
+  // Build unique retailer list with name + url for unknown retailers
+  const uniqueRetailers = items
+    .filter((item, i, arr) => arr.findIndex(x => x.retailerId === item.retailerId) === i)
+    .map(item => ({
+      id: item.retailerId,
+      name: item.retailer,
+      url: (() => { try { const u = new URL(item.url); return `${u.protocol}//${u.hostname}` } catch { return undefined } })(),
+    }))
 
   useEffect(() => {
     fetch('/api/deals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ retailerIds }),
+      body: JSON.stringify({ retailers: uniqueRetailers }),
     })
       .then(r => r.json())
       .then(data => { setDeals(data.results || {}); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [retailerIds])
+  }, [items])
 
-  const uniqueIds = [...new Set(retailerIds)]
+  const uniqueIds = uniqueRetailers.map(r => r.id)
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
@@ -58,12 +68,11 @@ export default function DealsModal({ retailerIds, onClose }: Props) {
               {uniqueIds.map(id => {
                 const retailer = RETAILERS.find(r => r.id === id)
                 const retailerDeals = deals[id] || []
-                if (!retailer) return null
 
                 return (
                   <div key={id}>
                     <h3 className="font-semibold text-gray-900 mb-2">
-                      {retailer.logo} {retailer.name}
+                      {retailer ? `${retailer.logo} ${retailer.name}` : uniqueRetailers.find(r => r.id === id)?.name || id}
                     </h3>
                     {retailerDeals.length === 0 ? (
                       <p className="text-sm text-gray-400">No deals found right now.</p>
