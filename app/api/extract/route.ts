@@ -186,6 +186,29 @@ export async function POST(req: NextRequest) {
       extracted = await extractZaraAPI(url)
     }
 
+    // Cider: extract from URL params (no scraping needed!)
+    if (!extracted?.title && url.includes('shopcider.com')) {
+      try {
+        const u = new URL(url)
+        const bt = u.searchParams.get('businessTracking')
+        if (bt) {
+          const decoded = JSON.parse(Buffer.from(bt, 'base64').toString('utf-8'))
+          const price = decoded.salePrice ? `€${decoded.salePrice}` : ''
+          const imgFile = decoded.skcFirstImg || ''
+          const image = imgFile
+            ? `https://img.shopcider.com/product/${imgFile}?imageView2/2/w/600`
+            : ''
+          const slug = u.pathname.split('/').pop() || ''
+          const title = slug
+            .replace(/-\d+$/, '')
+            .replace(/-/g, ' ')
+            .replace(/\b\w/g, (c: string) => c.toUpperCase())
+            .trim()
+          if (title) extracted = { title, price, image }
+        }
+      } catch { /* fall through */ }
+    }
+
     // Jina reader — works on most bot-protected sites
     if (!extracted?.title) {
       extracted = await extractViaJina(url)
