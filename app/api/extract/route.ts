@@ -186,30 +186,32 @@ export async function POST(req: NextRequest) {
       extracted = await extractZaraAPI(url)
     }
 
-    // Cider: extract from URL params (no scraping needed!)
+    // Cider: get price + title from URL params, image from desktop OG tag
     if (!extracted?.title && url.includes('shopcider.com')) {
       try {
         const u = new URL(url)
         const bt = u.searchParams.get('businessTracking')
+        const slug = u.pathname.split('/').pop() || ''
+        const title = slug
+          .replace(/-\d+$/, '')
+          .replace(/-/g, ' ')
+          .replace(/\b\w/g, (c: string) => c.toUpperCase())
+          .trim()
+        let price = ''
         if (bt) {
           const decoded = JSON.parse(Buffer.from(bt, 'base64').toString('utf-8'))
-          const price = decoded.salePrice ? `€${decoded.salePrice}` : ''
-          // Cider image CDN — try multiple path formats
-          const imgFile = decoded.skcFirstImg || ''
-          const spuId = decoded.spu || decoded.p || ''
-          const image = imgFile
-            ? `https://img.shopcider.com/hermes/product/tiny-image-${imgFile}?imageView2/2/w/600`
-            : spuId
-            ? `https://img.shopcider.com/hermes/product/${spuId}-1.jpg?imageView2/2/w/600`
-            : ''
-          const slug = u.pathname.split('/').pop() || ''
-          const title = slug
-            .replace(/-\d+$/, '')
-            .replace(/-/g, ' ')
-            .replace(/\b\w/g, (c: string) => c.toUpperCase())
-            .trim()
-          if (title) extracted = { title, price, image }
+          price = decoded.salePrice ? `€${decoded.salePrice}` : ''
         }
+        // Fetch OG image from desktop site (not blocked)
+        const desktopUrl = url.replace('m.shopcider.com', 'www.shopcider.com').split('?')[0]
+        const ogRes = await fetch(desktopUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
+          signal: AbortSignal.timeout(8000),
+        })
+        const ogHtml = ogRes.ok ? await ogRes.text() : ''
+        const image = ogHtml.match(/og:image[^>]*content="([^"]+)"/i)?.[1] ||
+          ogHtml.match(/content="([^"]+)"[^>]*og:image/i)?.[1] || ''
+        if (title) extracted = { title, price, image }
       } catch { /* fall through */ }
     }
 
