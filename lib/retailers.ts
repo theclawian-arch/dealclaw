@@ -3,6 +3,8 @@ export interface RetailerConfig {
   name: string
   domain: string
   logo: string
+  color: string        // brand color for placeholder background
+  textColor: string    // text color on brand background
   shippingThreshold: number | null
   shippingFree: string
   newUserOffer: string | null
@@ -17,6 +19,8 @@ export const RETAILERS: RetailerConfig[] = [
     name: 'Zara',
     domain: 'zara.com',
     logo: '🟢',
+    color: '#000000',
+    textColor: '#ffffff',
     shippingThreshold: 50,
     shippingFree: 'Free shipping on orders over €50',
     newUserOffer: null,
@@ -29,6 +33,8 @@ export const RETAILERS: RetailerConfig[] = [
     name: 'Mango',
     domain: 'mango.com',
     logo: '🟠',
+    color: '#e8b88a',
+    textColor: '#000000',
     shippingThreshold: 50,
     shippingFree: 'Free shipping on orders over €50',
     newUserOffer: '10% off your first order when you sign up',
@@ -41,6 +47,8 @@ export const RETAILERS: RetailerConfig[] = [
     name: 'Zalando',
     domain: 'zalando.es',
     logo: '🟡',
+    color: '#ff6900',
+    textColor: '#ffffff',
     shippingThreshold: 24.90,
     shippingFree: 'Free shipping on orders over €24.90. Always free returns.',
     newUserOffer: 'New customers: check for welcome offer at signup',
@@ -53,6 +61,8 @@ export const RETAILERS: RetailerConfig[] = [
     name: 'Pull&Bear',
     domain: 'pullandbear.com',
     logo: '🔵',
+    color: '#1a1a2e',
+    textColor: '#ffffff',
     shippingThreshold: 40,
     shippingFree: 'Free shipping on orders over €40',
     newUserOffer: '10% off first order with newsletter signup',
@@ -65,6 +75,8 @@ export const RETAILERS: RetailerConfig[] = [
     name: 'Bershka',
     domain: 'bershka.com',
     logo: '🟣',
+    color: '#2d0a4e',
+    textColor: '#ffffff',
     shippingThreshold: 40,
     shippingFree: 'Free shipping on orders over €40',
     newUserOffer: '10% off first order with newsletter signup',
@@ -77,6 +89,8 @@ export const RETAILERS: RetailerConfig[] = [
     name: 'H&M',
     domain: 'hm.com',
     logo: '🔴',
+    color: '#e50010',
+    textColor: '#ffffff',
     shippingThreshold: 40,
     shippingFree: 'Free shipping on orders over €40',
     newUserOffer: 'Join H&M Member for exclusive discounts',
@@ -89,6 +103,8 @@ export const RETAILERS: RetailerConfig[] = [
     name: "Women'Secret",
     domain: 'womenssecret.com',
     logo: '🩷',
+    color: '#e91e8c',
+    textColor: '#ffffff',
     shippingThreshold: 40,
     shippingFree: 'Free shipping on orders over €40',
     newUserOffer: '15% off first order with newsletter signup',
@@ -101,6 +117,8 @@ export const RETAILERS: RetailerConfig[] = [
     name: 'Sprinter',
     domain: 'sprinter.es',
     logo: '⚡',
+    color: '#e30613',
+    textColor: '#ffffff',
     shippingThreshold: 59,
     shippingFree: 'Free shipping on orders over €59',
     newUserOffer: '10% off first order with newsletter signup',
@@ -113,6 +131,8 @@ export const RETAILERS: RetailerConfig[] = [
     name: 'Cortefiel',
     domain: 'cortefiel.com',
     logo: '🏅',
+    color: '#2c3e7a',
+    textColor: '#ffffff',
     shippingThreshold: 60,
     shippingFree: 'Free shipping on orders over €60',
     newUserOffer: '10% off first order when you join Club Cortefiel',
