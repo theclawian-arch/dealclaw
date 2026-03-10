@@ -194,9 +194,13 @@ export async function POST(req: NextRequest) {
         if (bt) {
           const decoded = JSON.parse(Buffer.from(bt, 'base64').toString('utf-8'))
           const price = decoded.salePrice ? `€${decoded.salePrice}` : ''
+          // Cider image CDN — try multiple path formats
           const imgFile = decoded.skcFirstImg || ''
+          const spuId = decoded.spu || decoded.p || ''
           const image = imgFile
-            ? `https://img.shopcider.com/product/${imgFile}?imageView2/2/w/600`
+            ? `https://img.shopcider.com/hermes/product/tiny-image-${imgFile}?imageView2/2/w/600`
+            : spuId
+            ? `https://img.shopcider.com/hermes/product/${spuId}-1.jpg?imageView2/2/w/600`
             : ''
           const slug = u.pathname.split('/').pop() || ''
           const title = slug
@@ -230,12 +234,24 @@ export async function POST(req: NextRequest) {
 
     const category = await classifyCategory(extracted.title)
 
+    // Clean up retailer display name for unknown sites
+    const hostname = new URL(url).hostname.replace('www.', '').replace('m.', '')
+    const retailerName = retailer?.name || (
+      hostname
+        .replace(/\.(com|es|net|org|co\.uk).*$/, '')
+        .replace(/shop|store/gi, '')
+        .replace(/[-_]/g, ' ')
+        .trim()
+        .replace(/\b\w/g, c => c.toUpperCase()) ||
+      hostname
+    )
+
     return NextResponse.json({
       title: extracted.title || 'Unknown product',
       price: extracted.price || 'See website',
       image: extracted.image || '',
-      retailer: retailer?.name || new URL(url).hostname.replace('www.', ''),
-      retailerId: retailer?.id || 'unknown',
+      retailer: retailerName,
+      retailerId: retailer?.id || hostname.split('.')[0],
       category,
     })
   } catch (err) {
