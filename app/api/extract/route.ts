@@ -126,9 +126,10 @@ export async function POST(req: NextRequest) {
     if (!extracted || !extracted.title) {
       const slug = new URL(url).pathname.split('/').pop() || ''
       const titleFromSlug = slug
-        .replace(/[-_]/g, ' ')
-        .replace(/p\d+$/, '')
-        .replace(/\.[^.]+$/, '')
+        .replace(/\.[^.]+$/, '')           // remove .html extension first
+        .replace(/-p\d+$/, '')             // remove Zara-style product ID (-p00774350)
+        .replace(/[-_]/g, ' ')             // hyphens to spaces
+        .replace(/\b\w/g, c => c.toUpperCase()) // Title Case
         .trim()
       extracted = {
         title: titleFromSlug || 'Product from ' + (retailer?.name || new URL(url).hostname),
