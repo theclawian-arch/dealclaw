@@ -121,35 +121,56 @@ async function extractViaOG(url: string) {
   }
 }
 
-// Method 3: Zara internal API
+// Method 3: Zara internal API (tries multiple endpoint formats)
 async function extractZaraAPI(url: string) {
-  const match = url.match(/-p(\d+)\.html/i) || url.match(/\/p(\d+)/)
-  if (!match) return null
-  const productId = match[1]
+  const productMatch = url.match(/-p(\d+)\.html/i) || url.match(/\/p(\d+)/)
+  if (!productMatch) return null
+  const productId = productMatch[1]
 
-  try {
-    const apiUrl = `https://www.zara.com/es/en/product/${productId}/extra-detail?ajax=true`
-    const res = await fetch(apiUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
-        'Accept': 'application/json',
-        'Referer': 'https://www.zara.com/',
-      },
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    if (!data?.name) return null
+  // Also grab the color reference (v1 param) for better image lookup
+  const colorId = new URL(url).searchParams.get('v1') || ''
 
-    const price = data.price ? `€${(data.price / 100).toFixed(2)}` : ''
-    const imagePath = data.xmedia?.[0]?.path || data.media?.images?.[0]?.url || ''
-    const image = imagePath.startsWith('http') ? imagePath :
-      imagePath ? `https://static.zara.net/assets${imagePath}?w=600` : ''
+  const endpoints = [
+    `https://www.zara.com/es/en/product/${productId}/extra-detail?ajax=true${colorId ? `&v1=${colorId}` : ''}`,
+    `https://www.zara.com/es/en/product/${productId}/extra-detail?ajax=true`,
+  ]
 
-    return { title: data.name, price, image }
-  } catch {
-    return null
+  for (const apiUrl of endpoints) {
+    try {
+      const res = await fetch(apiUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-GB,en;q=0.9',
+          'Referer': 'https://www.zara.com/',
+          'Origin': 'https://www.zara.com',
+        },
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!res.ok) continue
+      const text = await res.text()
+      if (!text || text.startsWith('<!')) continue
+      const data = JSON.parse(text)
+      if (!data?.name) continue
+
+      const price = data.price ? `€${(data.price / 100).toFixed(2)}` :
+        data.displayPrice ? `€${data.displayPrice}` : ''
+
+      // Try multiple image path patterns
+      let image = ''
+      const media = data.xmedia || data.media?.images || data.colorInfo?.[0]?.xmedia || []
+      const firstMedia = Array.isArray(media) ? media[0] : null
+      if (firstMedia?.url) {
+        image = firstMedia.url.startsWith('http') ? firstMedia.url :
+          `https://static.zara.net/assets${firstMedia.url}?w=600`
+      } else if (firstMedia?.path) {
+        image = `https://static.zara.net/assets${firstMedia.path}?w=600`
+      }
+
+      return { title: data.name, price, image }
+    } catch { continue }
   }
+  return null
 }
 
 export async function POST(req: NextRequest) {

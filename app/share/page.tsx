@@ -20,23 +20,6 @@ function ShareContent() {
     extractAndSave(url)
   }, [url])
 
-  // For Zara: fetch the page client-side (browser bypasses bot protection)
-  async function clientSideExtract(targetUrl: string): Promise<{ image: string; price: string } | null> {
-    try {
-      const res = await fetch(targetUrl, { credentials: 'omit' })
-      const html = await res.text()
-      const ogImage = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)?.[1] ||
-        html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:image"/i)?.[1] || ''
-      const priceMatch = html.match(/"price"[^:]*:\s*"?([0-9]+[.,][0-9]{2})"?/i) ||
-        html.match(/([0-9]+[.,][0-9]{2})\s*€/) ||
-        html.match(/€\s*([0-9]+[.,][0-9]{2})/)
-      const price = priceMatch ? `€${priceMatch[1]}` : ''
-      return ogImage ? { image: ogImage, price } : null
-    } catch {
-      return null
-    }
-  }
-
   async function extractAndSave(targetUrl: string) {
     setStatus('loading')
     try {
@@ -47,14 +30,6 @@ function ShareContent() {
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-
-      // If image/price missing (e.g. Zara blocks server), try client-side fetch
-      if ((!data.image || !data.price || data.price === 'See website') &&
-          targetUrl.includes('zara.com')) {
-        const clientData = await clientSideExtract(targetUrl)
-        if (clientData?.image) data.image = clientData.image
-        if (clientData?.price) data.price = clientData.price
-      }
 
       const item: SavedItem = {
         id: crypto.randomUUID(),
