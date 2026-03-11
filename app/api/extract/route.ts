@@ -1,137 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getRetailerByDomain } from '@/lib/retailers'
-import type { Category } from '@/lib/store'
 
-async function classifyCategory(title: string): Promise<Category> {
-  const t = title.toLowerCase()
-  if (/shoe|sneaker|boot|sandal|heel|trainer|zapato|zapatilla|bota|sandalia/.test(t)) return 'shoes'
-  if (/dress|vestido|falda|skirt/.test(t)) return 'dresses'
-  if (/jacket|coat|blazer|chaqueta|abrigo|cazadora|parka|outerwear/.test(t)) return 'outerwear'
-  if (/jean|pant|trouser|short|legging|pantalon|vaquero|bermuda/.test(t)) return 'bottoms'
-  if (/bag|belt|scarf|hat|cap|gorra|bolso|cinturon|bufanda|accessori/.test(t)) return 'accessories'
-  if (/sport|gym|running|yoga|training|fitness|atletismo/.test(t)) return 'sportswear'
-  if (/shirt|tee|top|blouse|hoodie|sweatshirt|camiseta|blusa|sudadera|jersey/.test(t)) return 'tops'
-  return 'other'
-}
+const STORAGE_KEY = 'dealclaw_items'
 
-// Clean up title — strip retailer suffix
 function cleanTitle(title: string): string {
   return title
-    .replace(/\s*[-|]\s*(Zara|Mango|Zalando|Pull&Bear|Bershka|H&M|Women'?Secret|Sprinter|Cortefiel).*$/i, '')
-    .replace(/\s*\|\s*.*$/, '')
-    .trim()
+    .replace(/\s*-\s*Office/gi, '')
+    .replace(/\s*ZARA\s*/gi, '')
+    .replace(/^SPRINT\s+/gi, '')
+    .replace(/\|.*$/g, '')
+    .trim() || 'Product'
 }
 
-// Title from URL slug as last resort
-function titleFromSlug(url: string, retailerName: string): string {
-  try {
-    const slug = new URL(url).pathname.split('/').pop() || ''
-    const title = slug
-      .replace(/\.[^.]+$/, '')
-      .replace(/-p\d+$/, '')
-      .replace(/[-_]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase())
-      .trim()
-    return title || `Product from ${retailerName}`
-  } catch {
-    return `Product from ${retailerName}`
-  }
+// Function to clean price strings
+function cleanPrice(priceStr: string): string {
+  if (!priceStr) return ''
+  
+  // Find just the number parts
+  const match = priceStr.match(/[\d,\.]+/)
+  if (!match) return ''
+  
+  const clean = match[0]
+    .replace(',', '.')  // handle comma decimals
+    .replace(/^\./, '0.')  // handle .99 as 0.99
+  
+  const value = parseFloat(clean)
+  return isNaN(value) ? '' : `€${value.toFixed(2)}`
 }
 
-// Method 1: Try Jina Reader API (free, bypasses bot protection, returns clean JSON)
-async function extractViaJina(url: string) {
+// Cider extraction via desktop site's meta tags
+async function extractCider(url: string) {
   try {
-    const res = await fetch(`https://r.jina.ai/${url}`, {
-      headers: {
-        'Accept': 'application/json',
-        'X-Return-Format': 'json',
-        'X-With-Images-Summary': 'true',
-      },
-      signal: AbortSignal.timeout(12000),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-
-    const title = data.data?.title || data.title || ''
-    const description = data.data?.content || data.content || ''
-
-    // Extract image from images array if available
-    const images = data.data?.images || {}
-    const firstImage = Object.values(images)[0] as string || ''
-
-    // Extract price from description
-    const pricePatterns = [
-      /€\s*([0-9]+[.,][0-9]{2})/,
-      /([0-9]+[.,][0-9]{2})\s*€/,
-      /precio[^0-9]*([0-9]+[.,][0-9]{2})/i,
-      /price[^0-9]*([0-9]+[.,][0-9]{2})/i,
-    ]
-    let price = ''
-    for (const pattern of pricePatterns) {
-      const match = description.match(pattern)
-      if (match) { price = `€${match[1]}`; break }
-    }
-
-    if (!title) return null
-    return { title: cleanTitle(title), price, image: firstImage }
-  } catch {
-    return null
-  }
-}
-
-// Method 2: Standard OG via Googlebot UA
-async function extractViaOG(url: string) {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
+    const desktopUrl = url.replace('m.shopcider.com', 'www.shopcider.com')
+    
+    const res = await fetch(desktopUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)' },
       signal: AbortSignal.timeout(10000),
-      redirect: 'follow',
     })
+    
     if (!res.ok) return null
     const html = await res.text()
 
-    const ogTitle = html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1] ||
-      html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:title"/i)?.[1] ||
-      html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] || ''
+    const title = html.match(/og:description"\s*content="([^"]*)/i)?.[1] ||
+                 html.match(/<h1[^>]*>([^<]*)/i)?.[1] ||
+                 'Cider Product'
 
-    const ogImage = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)?.[1] ||
-      html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:image"/i)?.[1] || ''
+    // Try data attributes first
+    let rawPrice = html.match(/"salePrice":\s*"([^"]*)/i)?.[1] ||
+                  html.match(/"price":\s*"([^"]*)/i)?.[1] ||
+                  html.match(/data-price="([^"]*)/i)?.[1] ||
+                  ''
 
-    const pricePatterns = [
-      /"price":\s*"?([0-9]+[.,][0-9]{2})"?/i,
-      /class="[^"]*price[^"]*"[^>]*>\s*€?\s*([0-9]+[.,][0-9]{2})/i,
-      /<span[^>]*itemprop="price"[^>]*content="([^"]+)"/i,
-      /data-price="([0-9]+[.,][0-9]{2})"/i,
-      /"currentPrice":\s*([0-9]+\.?[0-9]*)/i,
-    ]
-    let price = ''
-    for (const pattern of pricePatterns) {
-      const match = html.match(pattern)
-      if (match) { price = `€${match[1]}`; break }
+    const price = rawPrice ? cleanPrice(rawPrice) : ''
+    
+    const image = html.match(/og:image"\s*content="([^"]*)/i)?.[1] || ''
+
+    return {
+      title: cleanTitle(title),
+      price: price || 'Price on site',
+      image,
     }
-
-    if (!ogTitle) return null
-    return { title: cleanTitle(ogTitle), price, image: ogImage }
   } catch {
     return null
   }
 }
 
-// Method 3: Zara internal API (tries multiple endpoint formats)
+// Zara extraction (kept working version)
 async function extractZaraAPI(url: string) {
   const productMatch = url.match(/-p(\d+)\.html/i) || url.match(/\/p(\d+)/)
   if (!productMatch) return null
   const productId = productMatch[1]
 
-  // Also grab the color reference (v1 param) for better image lookup
-  const colorId = new URL(url).searchParams.get('v1') || ''
-
   const endpoints = [
-    `https://www.zara.com/es/en/product/${productId}/extra-detail?ajax=true${colorId ? `&v1=${colorId}` : ''}`,
+    `https://www.zara.com/es/en/product/${productId}/extra-detail?ajax=true`,
     `https://www.zara.com/es/en/product/${productId}/extra-detail?ajax=true`,
   ]
 
@@ -139,25 +79,19 @@ async function extractZaraAPI(url: string) {
     try {
       const res = await fetch(apiUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'en-GB,en;q=0.9',
-          'Referer': 'https://www.zara.com/',
-          'Origin': 'https://www.zara.com',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+          'Accept': 'application/json',
         },
         signal: AbortSignal.timeout(8000),
       })
+      
       if (!res.ok) continue
-      const text = await res.text()
-      if (!text || text.startsWith('<!')) continue
-      const data = JSON.parse(text)
+      const data = await res.json()
       if (!data?.name) continue
 
-      const price = data.price ? `€${(data.price / 100).toFixed(2)}` :
-        data.displayPrice ? `€${data.displayPrice}` : ''
-
-      // Try multiple image path patterns
+      const price = data.price ? `€${(data.price / 100).toFixed(2)}` : ''
       let image = ''
+
       const media = data.xmedia || data.media?.images || data.colorInfo?.[0]?.xmedia || []
       const firstMedia = Array.isArray(media) ? media[0] : null
       if (firstMedia?.url) {
@@ -173,6 +107,51 @@ async function extractZaraAPI(url: string) {
   return null
 }
 
+// Standard OG extraction
+async function extractViaOG(url: string) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+      },
+      signal: AbortSignal.timeout(10000),
+    })
+    
+    if (!res.ok) return null
+    const html = await res.text()
+
+    const ogTitle = html.match(/og:title"\s*content="([^"]*)/i)?.[1] ||
+                   html.match(/<title[^>]*>([^<]*)/i)?.[1] || ''
+
+    const ogImage = html.match(/og:image"\s*content="([^"]*)/i)?.[1] ||
+                   html.match(/<meta[^>]*content="([^"]*)"[^>]*og:image/i)?.[1] || ''
+
+    const priceText = html.match(/og:price"\s*content="([^"]*)/i)?.[1] ||
+                     html.match(/"price":\s*"([^"]*)/i)?.[1] ||
+                     html.match(/class="[^"]*price[^"]*"[^>]*>\s*€?\s*([\d,\.]+)/i)?.[1] ||
+                     ''
+
+    const price = priceText ? cleanPrice(priceText) : null
+
+    const title = cleanTitle(ogTitle)
+    return { title, price: price || '', image: ogImage }
+  } catch {
+    return null
+  }
+}
+
+// Cleanup function for saving
+function cleanSavedItem(item: any): SavedItem {
+  return {
+    ...item,
+    title: cleanTitle(item.title),
+    price: cleanPrice(item.price),
+    category: item.category || 'other',
+  }
+}
+
+const retireCategories = ["shoes", "tops", "bottoms", "dresses", "outerwear", "accessories", "sportswear", "other"]
+
 export async function POST(req: NextRequest) {
   try {
     const { url } = await req.json()
@@ -181,83 +160,56 @@ export async function POST(req: NextRequest) {
     const retailer = getRetailerByDomain(url)
     let extracted: { title: string; price: string; image: string } | null = null
 
-    // Try methods in order of reliability per retailer
-    if (retailer?.id === 'zara') {
+    // New optimized extraction order
+    if (url.includes('shopcider.com')) {
+      extracted = await extractCider(url)
+    } else if (url.includes('zara.com')) {
+      extracted = await extractZaraAPI(url)
+    } else if (retailer?.id === 'zara') {
       extracted = await extractZaraAPI(url)
     }
 
-    // Cider: get price + title from URL params, image from desktop OG tag
-    if (!extracted?.title && url.includes('shopcider.com')) {
-      try {
-        const u = new URL(url)
-        const bt = u.searchParams.get('businessTracking')
-        const slug = u.pathname.split('/').pop() || ''
-        const title = slug
-          .replace(/-\d+$/, '')
-          .replace(/-/g, ' ')
-          .replace(/\b\w/g, (c: string) => c.toUpperCase())
-          .trim()
-        let price = ''
-        if (bt) {
-          const decoded = JSON.parse(Buffer.from(bt, 'base64').toString('utf-8'))
-          price = decoded.salePrice ? `€${decoded.salePrice}` : ''
-        }
-        // Fetch OG image from desktop site (not blocked)
-        const desktopUrl = url.replace('m.shopcider.com', 'www.shopcider.com').split('?')[0]
-        const ogRes = await fetch(desktopUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
-          signal: AbortSignal.timeout(8000),
-        })
-        const ogHtml = ogRes.ok ? await ogRes.text() : ''
-        const image = ogHtml.match(/og:image[^>]*content="([^"]+)"/i)?.[1] ||
-          ogHtml.match(/content="([^"]+)"[^>]*og:image/i)?.[1] || ''
-        if (title) extracted = { title, price, image }
-      } catch { /* fall through */ }
-    }
-
-    // Jina reader — works on most bot-protected sites
-    if (!extracted?.title) {
-      extracted = await extractViaJina(url)
-    }
-
-    // Standard OG extraction
-    if (!extracted?.title) {
+    // General fallback
+    if (!extracted?.title && !url.includes('zara.com')) {
       extracted = await extractViaOG(url)
     }
 
-    // Last resort: slug
-    if (!extracted?.title) {
-      extracted = {
-        title: titleFromSlug(url, retailer?.name || new URL(url).hostname),
-        price: 'See website',
-        image: '',
-      }
+    if (!extracted) {
+      // Last resort from URL slug
+      const slug = new URL(url).pathname.split('/').pop() || new URL(url).hostname
+      const title = slug.replace(/-\d+$/, '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim()
+      extracted = { title, price: 'Price on site', image: '' }
     }
 
     const category = await classifyCategory(extracted.title)
 
-    // Clean up retailer display name for unknown sites
-    const hostname = new URL(url).hostname.replace('www.', '').replace('m.', '')
-    const retailerName = retailer?.name || (
-      hostname
-        .replace(/\.(com|es|net|org|co\.uk).*$/, '')
-        .replace(/shop|store/gi, '')
-        .replace(/[-_]/g, ' ')
-        .trim()
-        .replace(/\b\w/g, c => c.toUpperCase()) ||
-      hostname
-    )
-
     return NextResponse.json({
-      title: extracted.title || 'Unknown product',
-      price: extracted.price || 'See website',
-      image: extracted.image || '',
-      retailer: retailerName,
-      retailerId: retailer?.id || hostname.split('.')[0],
+      ...cleanSavedItem(extracted),
       category,
     })
-  } catch (err) {
-    console.error('Extract error:', err)
-    return NextResponse.json({ error: 'Failed to extract product info' }, { status: 500 })
+  } catch (error) {
+    console.error('Extract error:', error)
+    return NextResponse.json({ error: 'Failed to extract data' }, { status: 500 })
   }
 }
+
+// Simple utility functions
+function classifyCategory(title: string): string {
+  const titleLower = title.toLowerCase()
+  
+  if (titleLower.includes('dress') || titleLower.includes('gown')) return 'dresses'
+  if (titleLower.includes('shoe') || titleLower.includes('boot') || titleLower.includes('sneaker')) return 'shoes'
+  if (titleLower.includes('top') || titleLower.includes('blouse') || titleLower.includes('shirt')) return 'tops'
+  if (titleLower.includes('pant') || titleLower.includes('jean') || titleLower.includes('skirt')) return 'bottoms'
+  if (titleLower.includes('coat') || titleLower.includes('jacket') || titleLower.includes('cardigan')) return 'outerwear'
+  if (titleLower.includes('bag') || titleLower.includes('belt') || titleLower.includes('jewelry')) return 'accessories'
+  if (titleLower.includes('sport') || titleLower.includes('gym') || titleLower.includes('fitness')) return 'sportswear'
+  return 'other' 
+}
+
+function getRetailerByDomain(url: string) {
+  const hostname = new URL(url).hostname.replace('www.', '').replace('m.', '')
+  return require('./../lib/retailers').RETAILERS.find(r => r.url.includes(hostname)) || null
+}
+
+export type { SavedItem }
