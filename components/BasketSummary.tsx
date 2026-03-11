@@ -6,19 +6,24 @@ interface BasketSummaryProps {
 }
 
 export default function BasketSummary({ items, selectedCategories }: BasketSummaryProps) {
+  // Handle all items including price extraction
+  const workingItems = items.filter(item => item.title && item.title !== 'Product')
+  
   const filteredItems = selectedCategories.size === 0 
-    ? items 
-    : items.filter(item => selectedCategories.has(item.category))
+    ? workingItems 
+    : workingItems.filter(item => selectedCategories.has(item.category))
 
   const itemsWithPrice = filteredItems.filter(item => 
     item.price && 
     item.price.trim() !== '' && 
+    item.price !== 'Price on site' &&
     item.price !== 'See website'
   )
   
   const itemsWithoutPrice = filteredItems.filter(item => 
     !item.price || 
     item.price.trim() === '' || 
+    item.price === 'Price on site' ||
     item.price === 'See website'
   )
 
@@ -38,10 +43,12 @@ export default function BasketSummary({ items, selectedCategories }: BasketSumma
 
   const hasCategories = selectedCategories.size > 0
   const categoryNames = hasCategories ? 
-    Array.from(selectedCategories).map(c => c.replace(/s$/, '')).join(', ') :
+    Array.from(selectedCategories).join(', ').replace(/([a-z])([A-Z])/g, '$1 $2') :
     'all categories'
 
-  if (items.length === 0) return null
+  // Don't show if we have no valid items to total
+  if (workingItems.length === 0) return null
+  if (selectedCategories.size > 0 && filteredItems.length === 0) return null
 
   return (
     <div className="p-4 bg-white border-t border-b border-gray-100">
