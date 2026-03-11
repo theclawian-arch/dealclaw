@@ -10,12 +10,26 @@ export default function BasketSummary({ items, selectedCategories }: BasketSumma
     ? items 
     : items.filter(item => selectedCategories.has(item.category))
 
-  const itemsWithPrice = filteredItems.filter(item => item.price && item.price !== 'See website')
-  const itemsWithoutPrice = filteredItems.filter(item => !item.price || item.price === 'See website')
+  const itemsWithPrice = filteredItems.filter(item => 
+    item.price && 
+    item.price.trim() !== '' && 
+    item.price !== 'See website'
+  )
+  const itemsWithoutPrice = filteredItems.filter(item => 
+    !item.price || 
+    item.price.trim() === '' || 
+    item.price === 'See website'
+  )
 
   const total = itemsWithPrice.reduce((sum, item) => {
-    const price = item.price.replace(/[^\d.,]/g, '').replace(',', '.')
-    return sum + (parseFloat(price) || 0)
+    // Handle currency symbols, spaces, and various formats
+    const cleanPrice = item.price
+      .replace(/[€\s€EUR$USD]/g, '')  // Remove currency symbols
+      .replace(/,/g, '.')              // Handle comma as decimal separator
+      .trim()
+    
+    const priceValue = parseFloat(cleanPrice.startsWith('.') ? `0${cleanPrice}` : cleanPrice)
+    return sum + (isNaN(priceValue) ? 0 : priceValue)
   }, 0)
 
   const hasCategories = selectedCategories.size > 0
