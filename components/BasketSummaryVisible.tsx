@@ -45,7 +45,7 @@ export default function BasketSummary({ items, selectedCategories }: BasketSumma
     Array.from(selectedCategories).join(', ') :
     'all categories'
 
-  if (workingItems.length === 0) return null
+
 
   return (
     <div className="p-4 bg-white border-t border-b border-gray-100 mb-4">
