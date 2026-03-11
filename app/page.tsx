@@ -3,7 +3,7 @@ import { useStore } from '@/lib/store'
 import { categories, CATEGORY_LABELS } from '@/lib/retailers'
 import ItemCard from '@/components/ItemCard'
 import DealsModal from '@/components/DealsModal'
-import BasketSummary from '@/components/BasketSummary'
+import BasketSummaryDebug from '@/components/BasketSummaryDebug'
 
 export default function HomePage() {
   const [items, setItems] = useStore('items', [])
@@ -101,7 +101,7 @@ export default function HomePage() {
 
         {/* Basket summary for filtered items */}
         {items.length > 0 && (
-          <BasketSummary 
+          <BasketSummaryDebug 
             items={items} 
             selectedCategories={selectedCategories} 
           />
