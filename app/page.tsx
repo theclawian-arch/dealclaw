@@ -1,23 +1,15 @@
-'use client'
-
-import { useEffect, useState } from 'react'
-import { getItems, getCategories, CATEGORY_LABELS, deleteItem } from '@/lib/store'
-import type { SavedItem, Category } from '@/lib/store'
+import { useState } from 'react'
+import { useStore } from '@/lib/store'
+import { categories, CATEGORY_LABELS } from '@/lib/retailers'
 import ItemCard from '@/components/ItemCard'
 import DealsModal from '@/components/DealsModal'
+import BasketSummary from '@/components/BasketSummary'
 
-export default function Home() {
-  const [items, setItems] = useState<SavedItem[]>([])
-  const [activeCategory, setActiveCategory] = useState<Category | 'all'>('all')
+export default function HomePage() {
+  const [items, setItems] = useStore('items', [])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showDeals, setShowDeals] = useState(false)
-
-  useEffect(() => {
-    setItems(getItems())
-  }, [])
-
-  const categories = getCategories()
-  const filtered = activeCategory === 'all' ? items : items.filter(i => i.category === activeCategory)
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set())
 
   function toggleSelect(id: string) {
     setSelected(prev => {
@@ -34,9 +26,28 @@ export default function Home() {
 
   const selectedItems = items.filter(i => selected.has(i.id))
 
+  // Filter items based on selected categories
+  const filteredItems = selectedCategories.size === 0 
+    ? items 
+    : items.filter(item => selectedCategories.has(item.category))
+
+  // Categories that actually have items
   const categoriesWithItems = categories.filter(c =>
     items.some(i => i.category === c)
   )
+
+  // Toggle category selection
+  function toggleCategory(category: string) {
+    setSelectedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(category)) {
+        next.delete(category)
+      } else {
+        next.add(category)
+      }
+      return next
+    })
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -55,13 +66,13 @@ export default function Home() {
           </a>
         </div>
 
-        {/* Category tabs */}
+        {/* Category selection */}
         {categoriesWithItems.length > 0 && (
           <div className="max-w-lg mx-auto px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-hide">
             <button
-              onClick={() => setActiveCategory('all')}
+              onClick={() => setSelectedCategories(new Set())}
               className={`shrink-0 text-sm px-3 py-1.5 rounded-full font-medium transition-all ${
-                activeCategory === 'all'
+                selectedCategories.size === 0
                   ? 'bg-gray-900 text-white'
                   : 'bg-gray-100 text-gray-600'
               }`}
@@ -71,9 +82,9 @@ export default function Home() {
             {categoriesWithItems.map(c => (
               <button
                 key={c}
-                onClick={() => setActiveCategory(c)}
+                onClick={() => toggleCategory(c)}
                 className={`shrink-0 text-sm px-3 py-1.5 rounded-full font-medium transition-all ${
-                  activeCategory === c
+                  selectedCategories.has(c)
                     ? 'bg-gray-900 text-white'
                     : 'bg-gray-100 text-gray-600'
                 }`}
@@ -87,41 +98,41 @@ export default function Home() {
 
       {/* Main content */}
       <div className="max-w-lg mx-auto px-4 py-4">
+
+        {/* Basket summary for filtered items */}
+        {items.length > 0 && (
+          <BasketSummary 
+            items={items} 
+            selectedCategories={selectedCategories} 
+          />
+        )}
+
         {items.length === 0 ? (
           <div className="text-center py-20">
             <div className="text-6xl mb-4">🦞</div>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Your wishlist is empty</h2>
             <p className="text-gray-500 text-sm mb-6">
-              Save items from Zara, Mango, Zalando and more.<br />
-              Browse any retailer and tap "+ Add item" to save.
+              Add items from any fashion site and we'll find the best deals for you
             </p>
             <a
               href="/share"
-              className="inline-block bg-gray-900 text-white text-sm font-semibold px-6 py-3 rounded-xl"
+              className="inline-block bg-gray-900 text-white text-sm font-semibold px-4 py-2 rounded-xl"
             >
-              Save your first item
+              Start adding items
             </a>
           </div>
         ) : (
-          <>
-            {filtered.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <p>No items in this category</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {filtered.map(item => (
-                  <ItemCard
-                    key={item.id}
-                    item={item}
-                    onDelete={handleDelete}
-                    selected={selected.has(item.id)}
-                    onToggleSelect={toggleSelect}
-                  />
-                ))}
-              </div>
-            )}
-          </>
+          <div className="grid grid-cols-2 gap-3">
+            {filteredItems.map(item => (
+              <ItemCard
+                key={item.id}
+                item={item}
+                onDelete={handleDelete}
+                selected={selected.has(item.id)}
+                onToggleSelect={toggleSelect}
+              />
+            ))}
+          </div>
         )}
       </div>
 
