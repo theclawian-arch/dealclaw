@@ -1,7 +1,7 @@
-import { Item } from '@/lib/store'
+import { SavedItem } from '@/lib/store'
 
 interface BasketSummaryProps {
-  items: Item[]
+  items: SavedItem[]
   selectedCategories: Set<string>
 }
 
@@ -15,6 +15,7 @@ export default function BasketSummary({ items, selectedCategories }: BasketSumma
     item.price.trim() !== '' && 
     item.price !== 'See website'
   )
+  
   const itemsWithoutPrice = filteredItems.filter(item => 
     !item.price || 
     item.price.trim() === '' || 
@@ -22,20 +23,25 @@ export default function BasketSummary({ items, selectedCategories }: BasketSumma
   )
 
   const total = itemsWithPrice.reduce((sum, item) => {
-    // Handle currency symbols, spaces, and various formats
-    const cleanPrice = item.price
-      .replace(/[€\s€EUR$USD]/g, '')  // Remove currency symbols
-      .replace(/,/g, '.')              // Handle comma as decimal separator
-      .trim()
-    
-    const priceValue = parseFloat(cleanPrice.startsWith('.') ? `0${cleanPrice}` : cleanPrice)
-    return sum + (isNaN(priceValue) ? 0 : priceValue)
+    try {
+      const cleanPrice = String(item.price || '')
+        .replace(/[^0-9,.]/g, '')  // Keep only numbers, dots, commas
+        .replace(',', '.')         // Handle European comma decimal
+        .trim()
+
+      const priceValue = parseFloat(cleanPrice)
+      return sum + (isNaN(priceValue) ? 0 : priceValue)
+    } catch {
+      return sum
+    }
   }, 0)
 
   const hasCategories = selectedCategories.size > 0
   const categoryNames = hasCategories ? 
     Array.from(selectedCategories).map(c => c.replace(/s$/, '')).join(', ') :
     'all categories'
+
+  if (items.length === 0) return null
 
   return (
     <div className="p-4 bg-white border-t border-b border-gray-100">
@@ -55,9 +61,9 @@ export default function BasketSummary({ items, selectedCategories }: BasketSumma
           </p>
         )}
         
-        {hasCategories && (
-          <p className="text-xs text-gray-400 mt-1">
-            From {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''} in {categoryNames}
+        {!hasCategories && itemsWithoutPrice.length === 0 && itemsWithPrice.length === 0 && (
+          <p className="text-xs text-gray-500 mt-1">
+            No items with prices to calculate
           </p>
         )}
       </div>
